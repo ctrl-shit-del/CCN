@@ -14,7 +14,7 @@ This repository contains a secure provisioning protocol prototype for Bluetooth 
 ## Repository Layout
 
 - provisioning_protocol/main.py
-	- End-to-end demo runner with normal flow, attack simulations, and ML phase.
+- End-to-end demo runner with normal flow, attack simulations, and ML phase.
 - provisioning_protocol/device.py
 	- Device-side provisioning logic.
 - provisioning_protocol/provisioner.py

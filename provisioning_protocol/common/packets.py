@@ -95,3 +95,39 @@ def parse_ack(packet):
     device_id = packet[1:5]
     status = packet[5]
     return {'type': msg_type, 'device_id': device_id, 'status': status}
+# ==============================================================================
+# NETWORK LAYER ENCAPSULATION
+# ==============================================================================
+
+def add_network_header(payload, src_addr, dst_addr, ttl=7):
+    """
+    Wraps any provisioning message in a network-layer header.
+    Mirrors Bluetooth Mesh network PDU structure.
+    
+    Network Header Format:
+    | TTL (1B) | Seq (4B) | Src Addr (2B) | Dst Addr (2B) | Payload |
+    """
+    header = struct.pack('!B I H H',
+        ttl,           # 1 byte  — Time To Live
+        next_seq(),    # 4 bytes — Sequence number
+        src_addr,      # 2 bytes — Source unicast address
+        dst_addr       # 2 bytes — Destination address
+    )
+    return header + payload
+
+def parse_network_header(packet):
+    ttl, seq, src, dst = struct.unpack('!B I H H', packet[:9])
+    payload = packet[9:]
+    return {
+        'ttl'    : ttl,
+        'seq'    : seq,
+        'src'    : src,
+        'dst'    : dst,
+        'payload': payload
+    }
+
+_seq_counter = 0
+def next_seq():
+    global _seq_counter
+    _seq_counter += 1
+    return _seq_counter

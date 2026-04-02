@@ -1,6 +1,8 @@
+﻿import socket
+import threading
 import time
+from .common.packets import add_network_header, parse_network_header
 
-# Message type byte values (mirrors constants.py to avoid circular imports)
 _MSG_BEACON       = 0x01
 _MSG_CHALLENGE    = 0x02
 _MSG_RESPONSE     = 0x03
@@ -15,77 +17,93 @@ _MSG_NAMES = {
     _MSG_ACK:          "ACK",
 }
 
-
 class NetworkChannel:
     """
-    Simulates a Bluetooth Mesh provisioning bearer (PB-ADV layer).
-
-    Extended for Phase 3:
-      - Records wall-clock timestamps for each message type sent.
-      - Accumulates total bytes transferred per session.
-      - Exposes get_session_metrics() for feature extraction and CCN metrics.
-    Supports optional eavesdropping and configurable propagation delay.
+    Simulates Bluetooth Mesh provisioning bearer
+    using UDP sockets over localhost.
+    Each entity binds to a real port — packets
+    actually traverse the OS network stack.
     """
+    
+    PROVISIONER_PORT = 5001
+    DEVICE_PORT      = 5002
+    HOST             = '127.0.0.1'
 
-    def __init__(self, verbose=True, delay: float = 0.0):
-        self.buffer      = []
-        self.intercepted = []          # attacker always sees every packet
-        self.verbose     = verbose
-        self.delay       = delay       # simulated propagation delay (seconds)
+    def __init__(self, role='provisioner', verbose=True, delay: float = 0.0):   
+        """
+        role: 'provisioner' or 'device'
+        """
+        self.role = role
+        self.verbose = verbose
+        self.delay = delay
+        self.intercepted = []
 
-        # --- timing / metrics state ---
-        self._session_start: float | None = None
-        self._timestamps: dict[int, float] = {}   # msg_type → send time (epoch s)
-        self._total_bytes   = 0
-        self._packet_sizes  = []       # individual packet sizes for variance calc
+        self.buffer = []
+        self._session_start = None
+        self._timestamps = {}
+        self._total_bytes = 0
+        self._packet_sizes = []
 
-    # ------------------------------------------------------------------
-    def send(self, sender_name: str, receiver_name: str, packet: bytes):
-        """Transmit a packet; record timestamp and accumulate byte count."""
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        if role == 'provisioner':
+            self.bind_port  = self.PROVISIONER_PORT
+            self.send_port  = 5003 # route to relay
+        else:
+            self.bind_port  = self.DEVICE_PORT
+            self.send_port  = 5003 # route to relay
+
+        self.sock.bind((self.HOST, self.bind_port))
+        self.sock.settimeout(300.0)
+
+    def send(self, sender_name, receiver_name, packet):
         now = time.perf_counter()
         if self.delay:
             time.sleep(self.delay)
 
-        self.buffer.append(packet)
-        self.intercepted.append(packet)
+        # Wrap in network layer
+        src_addr = 0x0001 if self.role == 'provisioner' else 0x1001
+        dst_addr = 0x1001 if self.role == 'provisioner' else 0x0001
+        
+        network_packet = add_network_header(packet, src_addr, dst_addr)
 
-        # Record per-message-type timestamp (first occurrence wins)
-        msg_type = packet[0] if packet else 0xFF
+        self.sock.sendto(network_packet, (self.HOST, self.send_port))
+        self.intercepted.append(network_packet)
+
+        msg_type = packet[0] if len(packet) > 0 else 0xFF
         if msg_type not in self._timestamps:
             self._timestamps[msg_type] = now
         if self._session_start is None:
             self._session_start = now
 
-        self._total_bytes += len(packet)
-        self._packet_sizes.append(len(packet))
+        self._total_bytes += len(network_packet)
+        self._packet_sizes.append(len(network_packet))
 
         if self.verbose:
             label = _MSG_NAMES.get(msg_type, f"0x{msg_type:02X}")
-            print(f"\n[CHANNEL] {sender_name} → {receiver_name}  [{label}]")
-            print(f"          Packet ({len(packet)} bytes): {packet.hex()}")
+            print(f"\n[CHANNEL:{self.role}] Sent {len(network_packet)} bytes "
+                  f"→ port {self.send_port} | {network_packet.hex()[:32]}...")
+    
+    def receive(self):
+        try:
+            data, addr = self.sock.recvfrom(4096)
+            net_hdr = parse_network_header(data)
+            payload = net_hdr['payload']
+            
+            if self.verbose:
+                print(f"[CHANNEL:{self.role}] Recv {len(data)} bytes (TTL={net_hdr['ttl']}, SEQ={net_hdr['seq']}) "
+                      f"← port {addr[1]}")
+            return payload
+        except socket.timeout:
+            return None
 
-    def receive(self) -> bytes | None:
-        if self.buffer:
-            return self.buffer.pop(0)
-        return None
+    def close(self):
+        self.sock.close()
 
-    # ------------------------------------------------------------------
     def get_session_metrics(self) -> dict:
-        """Return timing and size metrics for the completed session.
-
-        Keys
-        ----
-        beacon_to_challenge_ms   : delay between Beacon and Challenge (ms)
-        challenge_to_response_ms : delay between Challenge and Response (ms)
-        end_to_end_ms            : Beacon → ACK total latency (ms)
-        total_bytes              : sum of all packet bytes in session
-        num_packets              : number of packets exchanged
-        packet_size_variance     : variance of individual packet sizes
-        """
         ts = self._timestamps
-
         def delta_ms(a, b):
-            """Return (ts[b] - ts[a]) * 1000 if both keys present, else 0."""
             if a in ts and b in ts:
                 return max(0.0, (ts[b] - ts[a]) * 1000)
             return 0.0
@@ -107,8 +125,6 @@ class NetworkChannel:
         }
 
     def reset(self):
-        """Clear all state for reuse across sessions."""
-        self.buffer.clear()
         self.intercepted.clear()
         self._session_start = None
         self._timestamps.clear()
