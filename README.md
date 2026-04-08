@@ -110,6 +110,43 @@ If you want to regenerate figures, also install plotting dependencies used by yo
 
 ## How To Run
 
+### Two-Laptop Demo (Recommended)
+
+This project supports a real network demonstration where two physical machines communicate over WiFi. This proves that the provisioning protocol functions over a genuine network link.
+
+**Requirements:**
+- Two laptops on the **same WiFi network** (or a mobile hotspot).
+- Python 3.10+ installed on both.
+
+**Step 1: Find IP Addresses**
+1. On Laptop 1 (Provisioner), find your IP address (`ipconfig` on Windows, `ifconfig` on Linux/Mac).
+2. On Laptop 2 (Device), find your IP address.
+
+**Step 2: Update Configuration**
+Edit `provisioning_protocol/common/constants.py` on both laptops with the detected IPs:
+```python
+PROVISIONER_IP   = '192.168.x.x'   # Replace with Laptop 1 IP
+DEVICE_IP        = '192.168.y.y'   # Replace with Laptop 2 IP
+```
+
+**Step 3: Firewall Access (Windows only)**
+If you are on Windows, you must temporarily disable the Windows Firewall for private networks, or allow Python to communicate over UDP ports 5001-5003.
+
+**Step 4: Run the Protocol**
+1. On Laptop 1 (Provisioner), run:
+   ```bash
+   python provisioning_protocol/run_provisioner.py
+   ```
+2. On Laptop 2 (Device), run:
+   ```bash
+   python provisioning_protocol/run_device.py
+   ```
+3. Press `Enter` on Laptop 2 to broadcast the Beacon and watch the 5-message exchange happen over the air!
+
+### Local Simulation (All-in-One)
+
+To run the end-to-end demo runner with normal flow, attack simulations (replay, relay, misbinding), and the ML phase locally on a single machine:
+
 From repository root:
 
 ```bash
