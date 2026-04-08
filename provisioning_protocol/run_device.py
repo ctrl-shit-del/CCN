@@ -149,3 +149,6 @@ def main():
     except Exception as e:
         print(f"\n[ATTACK RESULT] Provisioner aborted connection or validation failed!")
         print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
