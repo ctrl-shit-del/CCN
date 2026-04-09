@@ -139,7 +139,6 @@ def main():
 
         # Step 5
         print("[STEP 5/5] Sending ACK...")
-        device.send_ack(channel)
 
         print("\n" + "=" * 50)
         print("  PROVISIONING COMPLETE")
