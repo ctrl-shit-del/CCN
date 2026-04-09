@@ -117,6 +117,7 @@ This project supports a real network demonstration where two physical machines c
 **Requirements:**
 - Two laptops on the **same WiFi network** (or a mobile hotspot).
 - Python 3.10+ installed on both.
+- Dependencies installed: `pip install -r requirements.txt`
 
 **Step 1: Find IP Addresses**
 1. On Laptop 1 (Provisioner), find your IP address (`ipconfig` on Windows, `ifconfig` on Linux/Mac).
@@ -141,7 +142,12 @@ If you are on Windows, you must temporarily disable the Windows Firewall for pri
    ```bash
    python provisioning_protocol/run_device.py
    ```
-3. Press `Enter` on Laptop 2 to broadcast the Beacon and watch the 5-message exchange happen over the air!
+3. **Select Mode on Device:** The Device node will prompt you to select an interactive demo mode:
+   - `normal`: Runs the secure 5-message context-bound provisioning handshake.
+   - `replay`: Resends a previously saved Response to test the Provisioner's nonce/freshness checks (must run `normal` first to capture).
+   - `relay`: Spoofs the ProvisionerID during token computation to simulate a MITM relay tampering.
+   - `misbinding`: Alters the DeviceID frame mid-flight to simulate identity spoofing.
+4. Press `Enter` on Laptop 2 to execute the selected mode and watch the exchange happen over the air! The Provisioner will display a session chart verifying the protocol's attack resistance gracefully.
 
 ### Local Simulation (All-in-One)
 
